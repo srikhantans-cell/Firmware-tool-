@@ -610,11 +610,22 @@
     }
   }
 
+  function visibleEntries(){
+    // Production only ever sees Deployed firmware -- this is an access
+    // restriction, not just a display filter, so every read path (list,
+    // rail counts, dashboard counts, compatibility matrix, CSV export,
+    // search) routes through this rather than the raw `entries` array.
+    if(currentUser && currentUser.role === "Production"){
+      return entries.filter(e=>e.status==="deployed");
+    }
+    return entries;
+  }
+
   function filtered(){
     const q = document.getElementById('search').value.trim().toLowerCase();
     const plat = document.getElementById('platformFilter').value;
     const stat = document.getElementById('statusFilter').value;
-    return entries.filter(e=>{
+    return visibleEntries().filter(e=>{
       if(!ECUS.includes(e.ecu)) return false;
       if(currentEcu !== "ALL" && e.ecu !== currentEcu) return false;
       if(plat && e.platform !== plat) return false;
@@ -632,11 +643,11 @@
     rail.innerHTML = "";
     const allItem = document.createElement('div');
     allItem.className = 'rail-item' + (currentEcu==="ALL" && currentView==="list" ? ' active':'');
-    allItem.innerHTML = `<span>All ECUs</span><span class="rail-count">${entries.filter(e=>ECUS.includes(e.ecu)).length}</span>`;
+    allItem.innerHTML = `<span>All ECUs</span><span class="rail-count">${visibleEntries().filter(e=>ECUS.includes(e.ecu)).length}</span>`;
     allItem.onclick = ()=>{ currentEcu="ALL"; currentView="list"; renderAll(); };
     rail.appendChild(allItem);
     ECUS.forEach(ecu=>{
-      const count = entries.filter(e=>e.ecu===ecu).length;
+      const count = visibleEntries().filter(e=>e.ecu===ecu).length;
       const item = document.createElement('div');
       item.className = 'rail-item' + (currentEcu===ecu && currentView==="list" ? ' active':'');
       item.innerHTML = `<span>${ecu}</span><span class="rail-count">${count}</span>`;
@@ -649,7 +660,7 @@
 
   function renderDashboard(list){
     const counts = {draft:0,validation:0,approved:0,deployed:0,deprecated:0,rejected:0};
-    entries.filter(e=>ECUS.includes(e.ecu)).forEach(e=>counts[e.status]++);
+    visibleEntries().filter(e=>ECUS.includes(e.ecu)).forEach(e=>counts[e.status]++);
     const order = ["draft","validation","approved","deployed","deprecated","rejected"];
     return `<div class="cards">${order.map(s=>`
       <div class="card">
@@ -687,7 +698,7 @@
   }
 
   function latestFor(ecu, platform){
-    const matches = entries.filter(e=>e.ecu===ecu && e.platform===platform && (e.status==="deployed" || e.status==="approved"));
+    const matches = visibleEntries().filter(e=>e.ecu===ecu && e.platform===platform && (e.status==="deployed" || e.status==="approved"));
     if(matches.length===0) return null;
     matches.sort((a,b)=>{
       if(a.status!==b.status) return a.status==="deployed" ? -1 : 1;
@@ -697,7 +708,8 @@
   }
 
   function renderMatrix(){
-    let html = `<div class="section-title">Compatibility matrix \u2014 current Approved / Deployed version per ECU &times; Vehicle Model</div>`;
+    const matrixLabel = (currentUser && currentUser.role === "Production") ? "current Deployed version" : "current Approved / Deployed version";
+    let html = `<div class="section-title">Compatibility matrix \u2014 ${matrixLabel} per ECU &times; Vehicle Model</div>`;
     html += `<div style="overflow-x:auto;"><table class="matrix-table" style="min-width:1400px;"><tr><th style="min-width:110px;">ECU</th>${VEHICLE_MODELS.map(p=>`<th style="min-width:130px; font-size:10.5px; line-height:1.3;">${p.replace(' (','<br>(')}</th>`).join('')}</tr>`;
     ECUS.forEach(ecu=>{
       html += `<tr><td>${ecu}</td>`;
@@ -1013,7 +1025,7 @@
   // ---------- Drawer ----------
   function openDrawer(id){
     openId = id;
-    const e = entries.find(x=>x.id===id);
+    const e = visibleEntries().find(x=>x.id===id);
     if(!e) return;
     const drawer = document.getElementById('drawer');
     const nextStates = NEXT[e.status] || [];
