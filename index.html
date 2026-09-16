@@ -482,6 +482,26 @@
     return data.access_token;
   }
 
+  async function supabaseInviteVI(email, password){
+    const res = await fetch(SUPABASE_AUTH_URL + "signup", {
+      method: "POST",
+      headers: { "apikey": SUPABASE_KEY, "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password }),
+    });
+    if(!res.ok){
+      const data = await res.json().catch(()=> ({}));
+      throw new Error(data.msg || data.error_code || `Sign-up failed: ${res.status}`);
+    }
+    return true;
+  }
+
+  function genTempPassword(){
+    const chars = "ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789!@#$";
+    let out = "";
+    for(let i=0;i<14;i++) out += chars[Math.floor(Math.random()*chars.length)];
+    return out;
+  }
+
   function genPasskey(){
     // Avoids visually ambiguous characters (0/O, 1/l/I).
     const chars = "ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
@@ -886,11 +906,50 @@
     }).join('');
 
     body.innerHTML = `
+      <div style="margin-bottom:28px; padding:14px 16px; border:1px solid var(--border-soft); border-radius:8px; background:var(--panel-2);">
+        <div style="font-weight:600; margin-bottom:6px;">Vehicle Integration</div>
+        <div style="font-size:12.5px; color:var(--text-faint); margin-bottom:10px; line-height:1.5;">
+          These are real Supabase accounts, not passkey members \u2014 this app can create a new one, but it can't list or remove existing ones (that requires admin access this app deliberately doesn't have). To see or revoke a Vehicle Integration account, use the Supabase dashboard: Authentication \u2192 Users.
+        </div>
+        <button class="btn" id="inviteViBtn">+ Invite Vehicle Integration Member</button>
+      </div>
       <div style="margin-bottom:16px;">
         <button class="btn" id="addMemberBtn">+ Add Member</button>
       </div>
       ${rowsHtml}
     `;
+
+    document.getElementById('inviteViBtn').onclick = ()=>{
+      const modal = document.getElementById('modal');
+      modal.innerHTML = `
+        <h2>Invite Vehicle Integration member</h2>
+        <div class="form-field">
+          <label>Email</label>
+          <input type="email" id="iv_email" placeholder="them@bounceshare.com">
+        </div>
+        <div class="err" id="iv_err"></div>
+        <div class="modal-actions">
+          <button class="btn-ghost" id="iv_cancel">Cancel</button>
+          <button class="btn" id="iv_save">Create account</button>
+        </div>
+      `;
+      document.getElementById('modalOverlay').classList.add('open');
+      modal.querySelector('#iv_cancel').onclick = closeModal;
+      modal.querySelector('#iv_save').onclick = async ()=>{
+        const email = modal.querySelector('#iv_email').value.trim();
+        const err = modal.querySelector('#iv_err');
+        if(!email){ err.textContent = "Enter an email."; return; }
+        const tempPassword = genTempPassword();
+        try{
+          await supabaseInviteVI(email, tempPassword);
+          closeModal();
+          toast(`Account created for ${email} \u2014 temp password: ${tempPassword} (copy this now). They must confirm via the email Supabase just sent before they can sign in, and should change this password after their first login.`);
+        }catch(e){
+          console.error("Invite VI failed", e);
+          err.textContent = e.message || "Could not create account \u2014 see console.";
+        }
+      };
+    };
 
     body.querySelectorAll('.member-del').forEach(btn=>{
       btn.onclick = ()=>{
